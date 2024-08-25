@@ -43,6 +43,59 @@ class Library extends Model {
     this.createdAt
     /** @type {Date} */
     this.updatedAt
+    /** @type {import('./LibraryFolder')[]|undefined} */
+    this.libraryFolders
+  }
+
+  /**
+   *
+   * @param {string} mediaType
+   * @returns
+   */
+  static getDefaultLibrarySettingsForMediaType(mediaType) {
+    if (mediaType === 'podcast') {
+      return {
+        coverAspectRatio: 1, // Square
+        disableWatcher: false,
+        autoScanCronExpression: null,
+        podcastSearchRegion: 'us'
+      }
+    } else {
+      return {
+        coverAspectRatio: 1, // Square
+        disableWatcher: false,
+        autoScanCronExpression: null,
+        skipMatchingMediaWithAsin: false,
+        skipMatchingMediaWithIsbn: false,
+        audiobooksOnly: false,
+        epubsAllowScriptedContent: false,
+        hideSingleBookSeries: false,
+        onlyShowLaterBooksInContinueSeries: false,
+        metadataPrecedence: ['folderStructure', 'audioMetatags', 'nfoFile', 'txtFiles', 'opfFile', 'absMetadata']
+      }
+    }
+  }
+
+  /**
+   *
+   * @returns {Promise<Library[]>}
+   */
+  static getAllWithFolders() {
+    return this.findAll({
+      include: this.sequelize.models.libraryFolder,
+      order: [['displayOrder', 'ASC']]
+    })
+  }
+
+  /**
+   *
+   * @param {string} libraryId
+   * @returns {Promise<Library>}
+   */
+  static findByIdWithFolders(libraryId) {
+    return this.findByPk(libraryId, {
+      include: this.sequelize.models.libraryFolder
+    })
   }
 
   /**
@@ -90,31 +143,9 @@ class Library extends Model {
   }
 
   /**
-   * @param {object} oldLibrary
-   * @returns {Library|null}
-   */
-  static async createFromOld(oldLibrary) {
-    const library = this.getFromOld(oldLibrary)
-
-    library.libraryFolders = oldLibrary.folders.map((folder) => {
-      return {
-        id: folder.id,
-        path: folder.fullPath
-      }
-    })
-
-    return this.create(library, {
-      include: this.sequelize.models.libraryFolder
-    }).catch((error) => {
-      Logger.error(`[Library] Failed to create library ${library.id}`, error)
-      return null
-    })
-  }
-
-  /**
    * Update library and library folders
    * @param {object} oldLibrary
-   * @returns
+   * @returns {Promise<Library|null>}
    */
   static async updateFromOld(oldLibrary) {
     const existingLibrary = await this.findByPk(oldLibrary.id, {
@@ -269,6 +300,35 @@ class Library extends Model {
         modelName: 'library'
       }
     )
+  }
+
+  get isPodcast() {
+    return this.mediaType === 'podcast'
+  }
+  get isBook() {
+    return this.mediaType === 'book'
+  }
+
+  /**
+   * TODO: Update to use new model
+   */
+  toOldJSON() {
+    return {
+      id: this.id,
+      name: this.name,
+      folders: (this.libraryFolders || []).map((f) => f.toOldJSON()),
+      displayOrder: this.displayOrder,
+      icon: this.icon,
+      mediaType: this.mediaType,
+      provider: this.provider,
+      settings: {
+        ...this.settings
+      },
+      lastScan: this.lastScan?.valueOf() || null,
+      lastScanVersion: this.lastScanVersion,
+      createdAt: this.createdAt.valueOf(),
+      lastUpdate: this.updatedAt.valueOf()
+    }
   }
 }
 
